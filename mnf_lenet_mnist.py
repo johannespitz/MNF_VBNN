@@ -1,7 +1,9 @@
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
+
 import numpy as np
 from progressbar import ETA, Bar, Percentage, ProgressBar
-from keras.utils.np_utils import to_categorical
+from tensorflow.keras.utils import to_categorical
 from mnist import MNIST
 import time, os
 from wrappers import MNFLeNet
@@ -14,7 +16,7 @@ def train():
     ytrain, yvalid, ytest = to_categorical(ytrain, 10), to_categorical(yvalid, 10), to_categorical(ytest, 10)
 
     N, height, width, n_channels = xtrain.shape
-    iter_per_epoch = N / 100
+    iter_per_epoch = N // 100
 
     sess = tf.InteractiveSession()
 
@@ -36,7 +38,7 @@ def train():
         tf.summary.scalar('KL prior', regs)
 
     with tf.name_scope('cross_entropy'):
-        cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=y, labels=y_))
+        cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=y, labels=y_))
         tf.summary.scalar('Loglike', cross_entropy)
 
     global_step = tf.Variable(0, trainable=False)
@@ -81,15 +83,15 @@ def train():
                                                                                   FLAGS.thres_var)
     if not os.path.exists(model_dir):
         os.makedirs(model_dir)
-    print 'Will save model as: {}'.format(model_dir + 'model')
+    print('Will save model as: {}'.format(model_dir + 'model'))
     # Train
-    for epoch in xrange(FLAGS.epochs):
+    for epoch in range(FLAGS.epochs):
         widgets = ["epoch {}/{}|".format(epoch + 1, FLAGS.epochs), Percentage(), Bar(), ETA()]
         pbar = ProgressBar(iter_per_epoch, widgets=widgets)
         pbar.start()
         np.random.shuffle(idx)
         t0 = time.time()
-        for j in xrange(iter_per_epoch):
+        for j in range(iter_per_epoch):
             steps += 1
             pbar.update(j)
             batch = np.random.choice(idx, 100)
@@ -110,7 +112,7 @@ def train():
             saver.save(sess, model_dir + 'model')
 
         string += ', dt: {:0.3f}'.format(time.time() - t0)
-        print string
+        print(string)
 
     saver.save(sess, model_dir + 'model')
     train_writer.close()
@@ -119,20 +121,20 @@ def train():
     widgets = ["Sampling |", Percentage(), Bar(), ETA()]
     pbar = ProgressBar(FLAGS.L, widgets=widgets)
     pbar.start()
-    for i in xrange(FLAGS.L):
+    for i in range(FLAGS.L):
         pbar.update(i)
-        for j in xrange(xtest.shape[0] / 100):
+        for j in range(xtest.shape[0] / 100):
             pyxi = sess.run(pyx, feed_dict={x: xtest[j * 100:(j + 1) * 100]})
             preds[j * 100:(j + 1) * 100] += pyxi / FLAGS.L
-    print
+    print()
     sample_accuracy = np.mean(np.equal(np.argmax(preds, 1), np.argmax(ytest, 1)))
-    print 'Sample test accuracy: {}'.format(sample_accuracy)
+    print('Sample test accuracy: {}'.format(sample_accuracy))
 
 
 def main():
-    if tf.gfile.Exists(FLAGS.summaries_dir):
-        tf.gfile.DeleteRecursively(FLAGS.summaries_dir)
-    tf.gfile.MakeDirs(FLAGS.summaries_dir)
+    if tf.io.gfile.exists(FLAGS.summaries_dir):
+        tf.io.gfile.rmtree(FLAGS.summaries_dir)
+    tf.io.gfile.makedirs(FLAGS.summaries_dir)
     train()
 
 if __name__ == '__main__':
@@ -140,7 +142,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--summaries_dir', type=str, default='logs/mnf_lenet',
                         help='Summaries directory')
-    parser.add_argument('-epochs', type=int, default=100)
+    parser.add_argument('-epochs', type=int, default=20)
     parser.add_argument('-epzero', type=int, default=1)
     parser.add_argument('-fq', default=2, type=int)
     parser.add_argument('-fr', default=2, type=int)

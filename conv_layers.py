@@ -1,14 +1,18 @@
+from abc import ABC
+
 from layers import Layer
 import numpy as np
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
+
 from norm_flows import MaskedNVPFlow
 from utils import randmat, zeros_d, ones_d, outer
 
 
 class Conv2DMNF(Layer):
-    '''2D convolutional layer with a multiplicative normalizing flow (MNF) aproximate posterior over the weights.
+    """2D convolutional layer with a multiplicative normalizing flow (MNF) aproximate posterior over the weights.
     Prior is a standard normal.
-    '''
+    """
 
     def __init__(self, nb_filter, nb_row, nb_col, input_shape=(), activation=tf.identity, N=1, name=None,
                  border_mode='SAME', subsample=(1, 1, 1, 1), flows_q=2, flows_r=2, learn_p=False, use_z=True,
@@ -66,9 +70,9 @@ class Conv2DMNF(Layer):
             self.flow_q = MaskedNVPFlow(self.nb_filter, n_flows=self.n_flows_q, name=self.name + '_fq', n_hidden=0,
                                         dim_h=self.flow_dim_h, scope=self.name)
 
-        print 'Built layer {}, output_dim: {}, input_shape: {}, flows_r: {}, flows_q: {}, use_z: {}, learn_p: {}, ' \
+        print('Built layer {}, output_dim: {}, input_shape: {}, flows_r: {}, flows_q: {}, use_z: {}, learn_p: {}, ' \
               'pvar: {}, thres_var: {}'.format(self.name, self.nb_filter, self.input_shape, self.n_flows_r,
-                                               self.n_flows_q, self.use_z, self.learn_p, self.prior_var, self.thres_var)
+                                               self.n_flows_q, self.use_z, self.learn_p, self.prior_var, self.thres_var))
 
     def sample_z(self, size_M=1, sample=True):
         if not self.use_z:

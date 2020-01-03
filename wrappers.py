@@ -1,5 +1,6 @@
 from layers import *
-from tensorflow.contrib import slim
+# from tensorflow.contrib import slim
+import tf_slim as slim
 
 
 class MNFLeNet(object):

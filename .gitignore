@@ -1,1 +1,6 @@
 *.pyc
+
+logs/
+models/
+
+.idea/

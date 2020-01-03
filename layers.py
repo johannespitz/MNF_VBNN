@@ -1,4 +1,6 @@
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
+
 from utils import get_layer_uid
 
 
@@ -12,7 +14,7 @@ class Layer(object):
         self.logging = logging
         self.nonlinearity = nonlin
         self.build()
-        print 'Logging: {}'.format(self.logging)
+        print('Logging: {}'.format(self.logging))
 
     def __call__(self, x, sample=True, **kwargs):
         with tf.name_scope(self.name):

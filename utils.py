@@ -1,5 +1,7 @@
 import numpy as np
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
+
 import os, sys
 
 _LAYER_UIDS = {}
@@ -11,7 +13,8 @@ flags = tf.app.flags
 FLAGS = flags.FLAGS
 sigma_init = 0.01
 
-DATA_DIR = os.environ['DATA_DIR']
+# DATA_DIR = os.environ['DATA_DIR']
+DATA_DIR = os.getcwd()
 dtype = tf.float32
 
 
