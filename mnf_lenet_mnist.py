@@ -3,20 +3,63 @@ tf.disable_v2_behavior()
 
 import numpy as np
 from progressbar import ETA, Bar, Percentage, ProgressBar
-from tensorflow.keras.utils import to_categorical
+from tensorflow import keras
 from mnist import MNIST
 import time, os
 from wrappers import MNFLeNet
 
+def get_data():
+    (xtrain, ytrain), (xtest, ytest) = keras.datasets.mnist.load_data()
+    xtrain, xtest = np.reshape(xtrain, (xtrain.shape[0], 28, 28, 1)), np.reshape(xtest, (xtest.shape[0], 28, 28, 1))
+    # (xtrain, ytrain), (xtest, ytest) = keras.datasets.cifar10.load_data()
+
+    def normalize(batch):
+        return batch / 255. - 0.5
+
+    xtrain = normalize(xtrain)
+    xtest  = normalize(xtest)
+
+    threshold = int(0.9 * xtrain.shape[0])
+    xvalid = xtrain[threshold:]
+    yvalid = ytrain[threshold:]
+    xtrain = xtrain[:threshold]
+    ytrain = ytrain[:threshold]
+
+    ytrain, yvalid, ytest = keras.utils.to_categorical(ytrain, 10), keras.utils.to_categorical(yvalid, 10), keras.utils.to_categorical(ytest, 10)
+
+    return (xtrain, ytrain), (xvalid, yvalid), (xtest, ytest)
+
+
+
+def generate_hold_out_masks(train_labels, test_labels):
+    num_labels = train_labels.shape[1]
+    keep_labels = np.random.choice(num_labels, num_labels // 10)
+    # keep_labels = [13]
+    print('Holding out the following labels: ', str(keep_labels))
+
+    train_labels, test_labels = np.argmax(train_labels, 1), np.argmax(test_labels, 1)
+
+    train_keep_mask = (np.zeros(train_labels.size) > 0)
+    for label in keep_labels:
+        train_keep_mask += (train_labels == label)
+    test_keep_mask = (np.zeros(test_labels.size) > 0)
+    for label in keep_labels:
+        test_keep_mask += (test_labels == label)
+    train_use_mask = np.invert(train_keep_mask)
+    test_use_mask = np.invert(test_keep_mask)
+
+    return (train_keep_mask, train_use_mask), (test_keep_mask, test_use_mask)
+
+
 
 def train():
-    mnist = MNIST()
-    (xtrain, ytrain), (xvalid, yvalid), (xtest, ytest) = mnist.images()
-    xtrain, xvalid, xtest = np.transpose(xtrain, [0, 2, 3, 1]), np.transpose(xvalid, [0, 2, 3, 1]), np.transpose(xtest, [0, 2, 3, 1])
-    ytrain, yvalid, ytest = to_categorical(ytrain, 10), to_categorical(yvalid, 10), to_categorical(ytest, 10)
+    (xtrain, ytrain), (xvalid, yvalid), (xtest, ytest) = get_data()
 
-    N, height, width, n_channels = xtrain.shape
-    iter_per_epoch = N // 100
+    (train_keep_mask, train_use_mask), (test_keep_mask, test_use_mask) = generate_hold_out_masks(ytrain, ytest)
+
+    N, height, width, n_channels = xtrain[train_use_mask].shape
+    batchsize = 1000
+    iter_per_epoch = N // batchsize
 
     sess = tf.InteractiveSession()
 
@@ -94,13 +137,19 @@ def train():
         for j in range(iter_per_epoch):
             steps += 1
             pbar.update(j)
-            batch = np.random.choice(idx, 100)
+            batch = np.random.choice(N, batchsize)
             if j == (iter_per_epoch - 1):
-                summary, _ = sess.run([merged, train_step], feed_dict={x: xtrain[batch], y_: ytrain[batch]})
+                summary, _ = sess.run([merged, train_step], feed_dict={x: xtrain[train_use_mask][batch], y_: ytrain[train_use_mask][batch]})
                 train_writer.add_summary(summary,  steps)
                 train_writer.flush()
             else:
-                sess.run(train_step, feed_dict={x: xtrain[batch], y_: ytrain[batch]})
+                sess.run(train_step, feed_dict={x: xtrain[train_use_mask][batch], y_: ytrain[train_use_mask][batch]})
+            # if j == (iter_per_epoch - 1):
+            #     summary, _ = sess.run([merged, train_step], feed_dict={x: xtrain[train_use_mask][j * batchsize:(j + 1) * batchsize], y_: ytrain[train_use_mask][j * batchsize:(j + 1) * batchsize]})
+            #     train_writer.add_summary(summary,  steps)
+            #     train_writer.flush()
+            # else:
+            #     sess.run(train_step, feed_dict={x: xtrain[train_use_mask][j * batchsize:(j + 1) * batchsize], y_: ytrain[train_use_mask][j * batchsize:(j + 1) * batchsize]})
 
         # the accuracy here is calculated by a crude MAP so as to have fast evaluation
         # it is much better if we properly integrate over the parameters by averaging across multiple samples
@@ -123,9 +172,9 @@ def train():
     pbar.start()
     for i in range(FLAGS.L):
         pbar.update(i)
-        for j in range(xtest.shape[0] / 100):
-            pyxi = sess.run(pyx, feed_dict={x: xtest[j * 100:(j + 1) * 100]})
-            preds[j * 100:(j + 1) * 100] += pyxi / FLAGS.L
+        for j in range(xtest.shape[0] // batchsize):
+            pyxi = sess.run(pyx, feed_dict={x: xtest[j * batchsize:(j + 1) * batchsize]})
+            preds[j * batchsize:(j + 1) * batchsize] += pyxi / FLAGS.L
     print()
     sample_accuracy = np.mean(np.equal(np.argmax(preds, 1), np.argmax(ytest, 1)))
     print('Sample test accuracy: {}'.format(sample_accuracy))
