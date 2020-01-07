@@ -9,6 +9,7 @@ import time, os
 from wrappers import MNFLeNet
 
 from mutual_information import plot_mi
+from tqdm import tqdm
 
 def get_data():
     # (xtrain, ytrain), (xtest, ytest) = keras.datasets.mnist.load_data()
@@ -137,7 +138,7 @@ def train(force_labels=None):
     for epoch in range(FLAGS.epochs):
 
 
-        if epoch % 1 == 0:
+        if epoch % 20 == 0:
             class FakeModel:
                 def __init__(self, sess, target):
                     self.sess = sess
@@ -147,15 +148,15 @@ def train(force_labels=None):
             fake_model = FakeModel(sess, pyx)
             tests_dict = dict(
                 random=np.random.uniform(size=list((2000,) + xtrain.shape[1:])),
-                trained_labels_train=xtrain[train_use_mask][:2000],
-                trained_labels_test=xtest[test_use_mask][:2000],
+                # trained_labels_train=xtrain[train_use_mask][:2000],
+                # trained_labels_test=xtest[test_use_mask][:2000],
                 new_label=xtrain[train_keep_mask][:2000],
             )
             plt = plot_mi(tests_dict, fake_model)
             if force_labels is None:
-                name = f'plots/cifar10/MiEnt_{epoch}.svg'
+                name = f'plots/test/cwMiEnt_{epoch}.svg'
             else:
-                name = f'plots/cifar10/MiEnt_keep{force_labels[0]}_{epoch}.svg'
+                name = f'plots/test/cwMiEnt_keep{force_labels[0]}_{epoch}.svg'
             plt.savefig(name)
             plt.close()
 
@@ -163,15 +164,10 @@ def train(force_labels=None):
             #     break
 
 
-
-        widgets = ["epoch {}/{}|".format(epoch + 1, FLAGS.epochs), Percentage(), Bar(), ETA()]
-        pbar = ProgressBar(iter_per_epoch, widgets=widgets)
-        pbar.start()
         np.random.shuffle(idx)
         t0 = time.time()
         for j in range(iter_per_epoch):
             steps += 1
-            pbar.update(j)
             batch = np.random.choice(N, batchsize)
             if j == (iter_per_epoch - 1):
                 summary, _ = sess.run([merged, train_step], feed_dict={x: xtrain[train_use_mask][batch], y_: ytrain[train_use_mask][batch]})
@@ -191,28 +187,27 @@ def train(force_labels=None):
         tacc = sess.run(accuracy, feed_dict={x: xvalid, y_: yvalid})
         string = 'Epoch {}/{}, valid_acc: {:0.3f}'.format(epoch + 1, FLAGS.epochs, tacc)
 
-        if (epoch + 1) % 10 == 0:
-            string += ', model_save: True'
-            saver.save(sess, model_dir + 'model')
+        # if (epoch + 1) % 10 == 0:
+        #     string += ', model_save: True'
+        #     saver.save(sess, model_dir + 'model')
 
         string += ', dt: {:0.3f}'.format(time.time() - t0)
         print(string)
 
     saver.save(sess, model_dir + 'model')
     train_writer.close()
+    tacc = []
 
     preds = np.zeros_like(ytest)
-    widgets = ["Sampling |", Percentage(), Bar(), ETA()]
-    pbar = ProgressBar(FLAGS.L, widgets=widgets)
-    pbar.start()
-    for i in range(FLAGS.L):
-        pbar.update(i)
+    for i in tqdm(range(FLAGS.L)):
         for j in range(xtest.shape[0] // batchsize):
+            tacc.append(sess.run(accuracy, feed_dict={x: xtest[j * batchsize:(j + 1) * batchsize], y_: ytest[j * batchsize:(j + 1) * batchsize]}))
             pyxi = sess.run(pyx, feed_dict={x: xtest[j * batchsize:(j + 1) * batchsize]})
             preds[j * batchsize:(j + 1) * batchsize] += pyxi / FLAGS.L
     print()
     sample_accuracy = np.mean(np.equal(np.argmax(preds, 1), np.argmax(ytest, 1)))
     print('Sample test accuracy: {}'.format(sample_accuracy))
+    print('Crude MAP: {}'.format(np.mean(tacc)))
 
     sess.close()
 
@@ -234,7 +229,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--summaries_dir', type=str, default='logs/mnf_lenet',
                         help='Summaries directory')
-    parser.add_argument('-epochs', type=int, default=20)
+    parser.add_argument('-epochs', type=int, default=201)
     parser.add_argument('-epzero', type=int, default=1)
     parser.add_argument('-fq', default=2, type=int)
     parser.add_argument('-fr', default=2, type=int)
