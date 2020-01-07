@@ -8,10 +8,12 @@ from mnist import MNIST
 import time, os
 from wrappers import MNFLeNet
 
+from mutual_information import plot_mi
+
 def get_data():
-    (xtrain, ytrain), (xtest, ytest) = keras.datasets.mnist.load_data()
-    xtrain, xtest = np.reshape(xtrain, (xtrain.shape[0], 28, 28, 1)), np.reshape(xtest, (xtest.shape[0], 28, 28, 1))
-    # (xtrain, ytrain), (xtest, ytest) = keras.datasets.cifar10.load_data()
+    # (xtrain, ytrain), (xtest, ytest) = keras.datasets.mnist.load_data()
+    # xtrain, xtest = np.reshape(xtrain, (xtrain.shape[0], 28, 28, 1)), np.reshape(xtest, (xtest.shape[0], 28, 28, 1))
+    (xtrain, ytrain), (xtest, ytest) = keras.datasets.cifar10.load_data()
 
     def normalize(batch):
         return batch / 255. - 0.5
@@ -31,9 +33,13 @@ def get_data():
 
 
 
-def generate_hold_out_masks(train_labels, test_labels):
+def generate_hold_out_masks(train_labels, test_labels, force_labels=None):
     num_labels = train_labels.shape[1]
-    keep_labels = np.random.choice(num_labels, num_labels // 10)
+
+    if force_labels is None:
+        keep_labels = np.random.choice(num_labels, num_labels // 10)
+    else:
+        keep_labels = force_labels
     # keep_labels = [13]
     print('Holding out the following labels: ', str(keep_labels))
 
@@ -52,10 +58,10 @@ def generate_hold_out_masks(train_labels, test_labels):
 
 
 
-def train():
+def train(force_labels=None):
     (xtrain, ytrain), (xvalid, yvalid), (xtest, ytest) = get_data()
 
-    (train_keep_mask, train_use_mask), (test_keep_mask, test_use_mask) = generate_hold_out_masks(ytrain, ytest)
+    (train_keep_mask, train_use_mask), (test_keep_mask, test_use_mask) = generate_hold_out_masks(ytrain, ytest, force_labels=force_labels)
 
     N, height, width, n_channels = xtrain[train_use_mask].shape
     batchsize = 1000
@@ -129,6 +135,35 @@ def train():
     print('Will save model as: {}'.format(model_dir + 'model'))
     # Train
     for epoch in range(FLAGS.epochs):
+
+
+        if epoch % 1 == 0:
+            class FakeModel:
+                def __init__(self, sess, target):
+                    self.sess = sess
+                    self.target = target
+                def predict(self, samples, batch_size=None):
+                    return sess.run(self.target, feed_dict={x: samples})
+            fake_model = FakeModel(sess, pyx)
+            tests_dict = dict(
+                random=np.random.uniform(size=list((2000,) + xtrain.shape[1:])),
+                trained_labels_train=xtrain[train_use_mask][:2000],
+                trained_labels_test=xtest[test_use_mask][:2000],
+                new_label=xtrain[train_keep_mask][:2000],
+            )
+            plt = plot_mi(tests_dict, fake_model)
+            if force_labels is None:
+                name = f'plots/cifar10/MiEnt_{epoch}.svg'
+            else:
+                name = f'plots/cifar10/MiEnt_keep{force_labels[0]}_{epoch}.svg'
+            plt.savefig(name)
+            plt.close()
+
+            # if epoch > 3:
+            #     break
+
+
+
         widgets = ["epoch {}/{}|".format(epoch + 1, FLAGS.epochs), Percentage(), Bar(), ETA()]
         pbar = ProgressBar(iter_per_epoch, widgets=widgets)
         pbar.start()
@@ -179,12 +214,20 @@ def train():
     sample_accuracy = np.mean(np.equal(np.argmax(preds, 1), np.argmax(ytest, 1)))
     print('Sample test accuracy: {}'.format(sample_accuracy))
 
+    sess.close()
+
 
 def main():
-    if tf.io.gfile.exists(FLAGS.summaries_dir):
-        tf.io.gfile.rmtree(FLAGS.summaries_dir)
-    tf.io.gfile.makedirs(FLAGS.summaries_dir)
-    train()
+    # if tf.io.gfile.exists(FLAGS.summaries_dir):
+    #     tf.io.gfile.rmtree(FLAGS.summaries_dir)
+    # tf.io.gfile.makedirs(FLAGS.summaries_dir)
+    # train()
+    for i in range(10):
+        if tf.io.gfile.exists(FLAGS.summaries_dir):
+            tf.io.gfile.rmtree(FLAGS.summaries_dir)
+        tf.io.gfile.makedirs(FLAGS.summaries_dir)
+        tf.keras.backend.clear_session()
+        train(force_labels=[i])
 
 if __name__ == '__main__':
     import argparse

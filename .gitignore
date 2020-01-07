@@ -1,6 +1,7 @@
 *.pyc
 
 logs/
+plots/
 models/
 
 .idea/
